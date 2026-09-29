@@ -124,6 +124,8 @@ local THEMES = {
     },
 }
 
+local runtimeEnv = (getgenv and getgenv()) or _G or {}
+
 local currentTheme
 
 local function copyThemeColors()
