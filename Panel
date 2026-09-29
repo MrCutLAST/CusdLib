@@ -1,11 +1,12 @@
 -- Custom UI library / Material You inspired visual system
 -- Public creation API remains compatible with the previous library.
--- Icons: pinned Lucide Roblox asset-id table loaded from the user-supplied source.
+-- Icons: Lucide assets with legacy algorithm rendering retained for close/minimize.
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local AssetService = game:GetService("AssetService")
 
 local player = Players.LocalPlayer
 local guiParent = player:WaitForChild("PlayerGui")
@@ -265,7 +266,21 @@ local function gradientSequence(role, profile)
     return ColorSequence.new(colors.primary2, colors.primary)
 end
 
-local make
+local function make(className, props, parent)
+    local object = Instance.new(className)
+    for key, value in pairs(props or {}) do object[key] = value end
+    object.Parent = parent
+    return object
+end
+
+local function corner(parent, radius)
+    local object = make("UICorner", {
+        CornerRadius = THEMES[currentTheme].square and UDim.new(0, 0) or UDim.new(0, radius),
+    }, parent)
+    object:SetAttribute("CustomUIRadiusScale", 0)
+    object:SetAttribute("CustomUIRadiusOffset", radius)
+    return object
+end
 
 local function themeGradient(parent, role, rotation)
     local g = make("UIGradient", { Color = gradientSequence(role, THEMES[currentTheme]), Rotation = rotation or 0 }, parent)
@@ -284,6 +299,77 @@ local function lucideIcon(parent, name, position, size, zIndex, color)
     }, parent)
 end
 
+-- Legacy algorithm-rendered icons are intentionally retained only for the
+-- window Close and Minimize controls. Everything else uses Lucide.
+local ALGORITHM_ICON_ALPHA = {
+    ["close"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFwkAAAAAAAAAAAAAAAAAAAAAAAAAAAkXAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACZ//FQAAAAAAAAAAAAAAAAAAAAAAAAUPL/mQAAAAAAAAAAAAAAAAAAAAAAAAAAABf////6UgAAAAAAAAAAAAAAAAAAAABS+v///xYAAAAAAAAAAAAAAAAAAAAAAAAAAArx////+lIAAAAAAAAAAAAAAAAAAFL6////8QkAAAAAAAAAAAAAAAAAAAAAAAAAAABQ+v////pSAAAAAAAAAAAAAAAAUvr////6UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAS/j////8WAAAAAAAAAAAAABS+v////pRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEv4/////FgAAAAAAAAAAFL6////+lEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABL+P////xYAAAAAAAAUvr////6UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAS/j////8WAAAAABS+v////pRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEv4/////FgAAFL6////+lEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABL+P////xYUvr////6UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUvr////6+v////pSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEv4////////+lEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABL+P/////6UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABS+v/////8WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFL6/////////FgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUvr////6+v////pSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABS+v////pRS/j////8WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFL6////+lEAAEv4/////FgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUvr////6UQAAAABL+P////xYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABS+v////pRAAAAAAAAS/j////8WAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFL6////+lEAAAAAAAAAAEv4/////FgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUvr////6UQAAAAAAAAAAAABL+P////xYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQ+v////pSAAAAAAAAAAAAAAAAUvr////6UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAry////+lIAAAAAAAAAAAAAAAAAAFL6////8QkAAAAAAAAAAAAAAAAAAAAAAAAAABf////6UgAAAAAAAAAAAAAAAAAAAABS+v///xYAAAAAAAAAAAAAAAAAAAAAAAAAAACZ//FQAAAAAAAAAAAAAAAAAAAAAAAAUPH/mAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFggAAAAAAAAAAAAAAAAAAAAAAAAAAAkWAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    ["minimize"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATeX//////////////////////////+VNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA5f/////////////////////////////kAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA5f/////////////////////////////kAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATeT//////////////////////////+RNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+}
+local algorithmEditableImages = {}
+local BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+local function decodeAlgorithmBase64(value)
+    local output, accumulator, bits = {}, 0, 0
+    for index = 1, #value do
+        local char = value:sub(index, index)
+        if char ~= "=" then
+            local position = BASE64_ALPHABET:find(char, 1, true)
+            if position then
+                accumulator = accumulator * 64 + (position - 1)
+                bits = bits + 6
+                while bits >= 8 do
+                    bits = bits - 8
+                    output[#output + 1] = string.char(math.floor(accumulator / (2 ^ bits)) % 256)
+                end
+                accumulator = accumulator % (2 ^ bits)
+            end
+        end
+    end
+    return table.concat(output)
+end
+
+local function algorithmIcon(parent, name, position, size, zIndex, color)
+    local encoded = ALGORITHM_ICON_ALPHA[name]
+    if not encoded then return nil end
+    if not buffer or type(buffer.create) ~= "function" or not AssetService then return nil end
+
+    local alpha = decodeAlgorithmBase64(encoded)
+    if #alpha < 48 * 48 then return nil end
+
+    local ok, editable = pcall(function()
+        return AssetService:CreateEditableImage({ Size = Vector2.new(48, 48) })
+    end)
+    if not ok or not editable then return nil end
+
+    local okWrite = pcall(function()
+        local pixels = buffer.create(48 * 48 * 4)
+        for index = 1, 48 * 48 do
+            local offset = (index - 1) * 4
+            buffer.writeu8(pixels, offset, 255)
+            buffer.writeu8(pixels, offset + 1, 255)
+            buffer.writeu8(pixels, offset + 2, 255)
+            buffer.writeu8(pixels, offset + 3, string.byte(alpha, index) or 0)
+        end
+        editable:WritePixelsBuffer(Vector2.zero, Vector2.new(48, 48), pixels)
+    end)
+    if not okWrite then
+        pcall(function() editable:Destroy() end)
+        return nil
+    end
+
+    algorithmEditableImages[#algorithmEditableImages + 1] = editable
+    local okContent, content = pcall(function() return Content.fromObject(editable) end)
+    if not okContent or not content then return nil end
+
+    return make("ImageLabel", {
+        Name = "AlgorithmIcon_" .. tostring(name),
+        BackgroundTransparency = 1, BorderSizePixel = 0,
+        Position = position or UDim2.fromScale(0, 0), Size = size or UDim2.fromScale(1, 1),
+        ImageContent = content, ImageColor3 = color or C.secondary,
+        ScaleType = Enum.ScaleType.Fit, ZIndex = zIndex or 12,
+    }, parent)
+end
+
 local function makePressLayer(parent, radius, zIndex)
     local layer = parent:FindFirstChild("PressLayer")
     if layer then return layer end
@@ -294,22 +380,6 @@ local function makePressLayer(parent, radius, zIndex)
     }, parent)
     corner(layer, radius or 12)
     return layer
-end
-
-function make(className, props, parent)
-    local object = Instance.new(className)
-    for key, value in pairs(props or {}) do object[key] = value end
-    object.Parent = parent
-    return object
-end
-
-local function corner(parent, radius)
-    local object = make("UICorner", {
-        CornerRadius = THEMES[currentTheme].square and UDim.new(0, 0) or UDim.new(0, radius),
-    }, parent)
-    object:SetAttribute("CustomUIRadiusScale", 0)
-    object:SetAttribute("CustomUIRadiusOffset", radius)
-    return object
 end
 
 local function stroke(parent, color, transparency, thickness)
@@ -686,7 +756,7 @@ function NexusLib:GetThemeName()
 end
 
 function NexusLib:GetThemes()
-    return { "Material You", "system24" }
+    return { "Material You", "system24", "Ocean Glass", "Aurora Dark", "Frost Light" }
 end
 
 function NexusLib:SetTheme(value)
@@ -801,14 +871,32 @@ function NexusLib:CreateWindow(config)
         local button = make("ImageButton", {
             Name = name, BackgroundColor3 = C.raised, BorderSizePixel = 0, AutoButtonColor = false, Active = true,
             AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, xOffset, 0, 18), Size = UDim2.fromOffset(30, 30),
-            ZIndex = 10, Image = lucideAsset(iconName) or DEFAULT_FLOATING_ICON, ImageColor3 = C.secondary,
+            ZIndex = 10, Image = "", ImageColor3 = C.secondary, ImageTransparency = 1,
         }, top)
         corner(button, 15); stroke(button, C.lineSoft, 0.10)
         themeGradient(button, "primary", 0)
-        button.ImageTransparency = 0.15
+
+        local algorithmName = (iconName == "x" and "close") or (iconName == "minimize-2" and "minimize") or nil
+        local iconObject = algorithmName and algorithmIcon(
+            button, algorithmName, UDim2.fromOffset(6, 6), UDim2.fromOffset(18, 18), 12, C.secondary
+        ) or lucideIcon(
+            button, iconName, UDim2.fromOffset(6, 6), UDim2.fromOffset(18, 18), 12, C.secondary
+        )
+
+        if not iconObject then
+            button.Image = lucideAsset(iconName) or DEFAULT_FLOATING_ICON
+            button.ImageColor3 = C.secondary
+            button.ImageTransparency = 0.15
+            iconObject = button
+        end
+
         local hover = hoverLayer(button, hoverColor, 15, 11, 0.76)
         addPressScale(button)
-        bindHover(button, hover, function() button.ImageColor3 = C.ivory end, function() button.ImageColor3 = C.secondary end)
+        bindHover(button, hover, function()
+            if iconObject then iconObject.ImageColor3 = C.ivory end
+        end, function()
+            if iconObject then iconObject.ImageColor3 = C.secondary end
+        end)
         return button
     end
     local minimize = createTopButton("MinimizeButton", "minimize-2", C.primary2, -46)
