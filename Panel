@@ -913,16 +913,12 @@ function NexusLib:CreateWindow(config)
     }, shell)
     corner(bottomBar, 20)
     make("Frame", { BorderSizePixel = 0, BackgroundColor3 = C.lineSoft, Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 1), ZIndex = 8 }, bottomBar)
-    local grip = lucideIcon(bottomBar, "grip-horizontal", UDim2.fromScale(0.5, 0), UDim2.fromOffset(34, 18), 9, C.muted)
-    if grip then grip.AnchorPoint = Vector2.new(0.5, 0); grip.Position = UDim2.new(0.5, 0, 0, 2) end
-
     local resizeHandle = make("ImageButton", {
         Name = "ResizeHandle", BackgroundTransparency = 1, BorderSizePixel = 0, AutoButtonColor = false,
         Active = true, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 0, 1, 0),
-        Size = UDim2.fromOffset(28, 28), ZIndex = 30, Image = lucideAsset("move-diagonal-2") or DEFAULT_FLOATING_ICON,
-        ImageColor3 = C.muted, ImageTransparency = 0.18,
+        Size = UDim2.fromOffset(28, 28), ZIndex = 30, Image = "",
+        ImageTransparency = 1,
     }, shell)
-    addPressScale(resizeHandle)
 
     local launcher = make("ImageButton", {
         Name = tostring(config.ToggleName or "FloatingToggle"), BackgroundColor3 = C.raised, BorderSizePixel = 0,
@@ -1209,6 +1205,20 @@ end
 
 function Window:Open()
     if self._open then return end
+    local camera = workspace.CurrentCamera
+    if camera then
+        local viewportSize = camera.ViewportSize
+        local halfWidth = self._size.X * self._scale.Scale * 0.5
+        local halfHeight = self._size.Y * self._scale.Scale * 0.5
+        local maxX = math.max(0, viewportSize.X * 0.5 - halfWidth - 8)
+        local maxY = math.max(0, viewportSize.Y * 0.5 - halfHeight - 8)
+        self._openPosition = UDim2.new(
+            0.5,
+            math.clamp(self._openPosition.X.Offset, -maxX, maxX),
+            0.5,
+            math.clamp(self._openPosition.Y.Offset, -maxY, maxY)
+        )
+    end
     self._open = true
     self._visibilityId = self._visibilityId + 1
     local launcher = self._launcher
@@ -1289,6 +1299,10 @@ function Tab:CreateSection(name)
     text.Size = UDim2.new(1, 0, 1, 0)
     local section = setmetatable({ _tab = self, _name = name }, Section)
     return section
+end
+
+function Tab:AddSection(name)
+    return self:CreateSection(tostring(name or "Section"))
 end
 
 local function controlRow(section, name, height)
@@ -1711,6 +1725,130 @@ function Section:CreateSlider(config)
         Set = function(_, v) setFromX(track.AbsolutePosition.X + track.AbsoluteSize.X * (range > 0 and math.clamp((tonumber(v) - min)/range,0,1) or 0), true) end,
     }
 end
+
+function Section:AddToggle(config)
+    config = config or {}
+    return self:CreateToggle({
+        Name = config.Title or config.Name or "Toggle",
+        Default = config.Default == true,
+        Callback = config.Callback,
+    })
+end
+
+function Section:AddButton(config)
+    config = config or {}
+    return self:CreateButton({
+        Name = config.Title or config.Name or "Button",
+        Callback = config.Callback,
+    })
+end
+
+function Section:AddDropdown(config)
+    config = config or {}
+    local default = config.Default
+    if config.Multi then
+        if type(default) ~= "table" then default = default ~= nil and { default } or {} end
+        return self:CreateMultiDropdown({
+            Name = config.Title or config.Name or "Dropdown",
+            Options = config.Options or {},
+            Default = default,
+            Callback = config.Callback,
+        })
+    end
+    if type(default) == "table" then default = default[1] end
+    return self:CreateDropdown({
+        Name = config.Title or config.Name or "Dropdown",
+        Options = config.Options or {},
+        Default = default,
+        Callback = config.Callback,
+    })
+end
+
+function Section:AddInput(config)
+    config = config or {}
+    return self:CreateTextbox({
+        Name = config.Title or config.Name or "Input",
+        Default = config.Default or "",
+        Placeholder = config.Placeholder,
+        Callback = config.Callback,
+    })
+end
+
+function Section:AddParagraph(config)
+    local titleText, contentText
+    if type(config) == "table" then
+        titleText = config.Title or config[1] or ""
+        contentText = config.Content or config[2] or ""
+    else
+        titleText = ""
+        contentText = config == nil and "" or tostring(config)
+    end
+
+    local frame = make("Frame", {
+        Name = "Paragraph",
+        LayoutOrder = nextOrder(self._tab),
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+    }, self._tab._scroll)
+    make("UIListLayout", {
+        Padding = UDim.new(0, 3),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, frame)
+    local title = label(frame, tostring(titleText), 11, C.ivory, FONT_LABEL)
+    title.LayoutOrder = 1
+    title.Size = UDim2.new(1, 0, 0, 18)
+    title.Visible = titleText ~= nil and tostring(titleText) ~= ""
+    local content = label(frame, tostring(contentText), 10, C.secondary)
+    content.LayoutOrder = 2
+    content.Size = UDim2.new(1, 0, 0, 0)
+    content.AutomaticSize = Enum.AutomaticSize.Y
+    content.TextWrapped = true
+    content.TextYAlignment = Enum.TextYAlignment.Top
+    content.Visible = contentText ~= nil and tostring(contentText) ~= ""
+
+    return {
+        _frame = frame,
+        Set = function(_, value)
+            if type(value) == "table" then
+                if value.Title ~= nil or value[1] ~= nil then
+                    title.Text = tostring(value.Title or value[1] or "")
+                    title.Visible = title.Text ~= ""
+                end
+                if value.Content ~= nil or value[2] ~= nil then
+                    content.Text = tostring(value.Content or value[2] or "")
+                    content.Visible = content.Text ~= ""
+                end
+            else
+                content.Text = value == nil and "" or tostring(value)
+                content.Visible = content.Text ~= ""
+            end
+        end,
+    }
+end
+
+function Section:AddLine()
+    local line = make("Frame", {
+        Name = "SectionDivider",
+        LayoutOrder = nextOrder(self._tab),
+        BackgroundColor3 = C.lineSoft,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 1),
+    }, self._tab._scroll)
+    return { _frame = line }
+end
+
+function Section:AddSeperator(value)
+    local title = type(value) == "table" and (value.Title or value[1]) or value
+    if title == nil or tostring(title) == "" then
+        return self:AddLine()
+    end
+    local header = self:AddParagraph({ Title = tostring(title) })
+    header._frame.Size = UDim2.new(1, 0, 0, 18)
+    return header
+end
+
+Section.AddSeparator = Section.AddSeperator
 
 function NexusLib:DestroyAll()
     for _, window in ipairs(self._windows) do pcall(function() window:Destroy() end) end
