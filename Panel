@@ -1012,8 +1012,11 @@ function NexusLib:CreateWindow(config)
         local camera = workspace.CurrentCamera
         local viewportSize = camera and camera.ViewportSize or Vector2.new(1920,1080)
         local halfW, halfH = currentSize.X * scale.Scale * 0.5, currentSize.Y * scale.Scale * 0.5
-        local px = math.clamp(startPosition.X.Offset + delta.X / math.max(scale.Scale, 0.01), -viewportSize.X/2 + halfW + 6, viewportSize.X/2 - halfW - 6)
-        local py = math.clamp(startPosition.Y.Offset + delta.Y / math.max(scale.Scale, 0.01), -viewportSize.Y/2 + halfH + 6, viewportSize.Y/2 - halfH - 6)
+        local safeScale = math.max(scale.Scale, 0.01)
+        local maxOffsetX = math.max(0, viewportSize.X * 0.5 - halfW - 6) / safeScale
+        local maxOffsetY = math.max(0, viewportSize.Y * 0.5 - halfH - 6) / safeScale
+        local px = math.clamp(startPosition.X.Offset + delta.X / safeScale, -maxOffsetX, maxOffsetX)
+        local py = math.clamp(startPosition.Y.Offset + delta.Y / safeScale, -maxOffsetY, maxOffsetY)
         shell.Position = UDim2.new(0.5, px, 0.5, py)
         shadow.Position = shell.Position + UDim2.fromOffset(0, 7)
     end))
@@ -1170,6 +1173,10 @@ function Window:CreateTab(name, iconName)
     return tab
 end
 
+function Window:AddTab(name, iconName)
+    return self:CreateTab(name, iconName)
+end
+
 function Window:_select(tab, instant)
     if self._active == tab then return end
     self._transitionId = self._transitionId + 1
@@ -1235,8 +1242,9 @@ function Window:Open()
         local viewportSize = camera.ViewportSize
         local halfWidth = self._size.X * self._scale.Scale * 0.5
         local halfHeight = self._size.Y * self._scale.Scale * 0.5
-        local maxX = math.max(0, viewportSize.X * 0.5 - halfWidth - 8)
-        local maxY = math.max(0, viewportSize.Y * 0.5 - halfHeight - 8)
+        local safeScale = math.max(self._scale.Scale, 0.01)
+        local maxX = math.max(0, viewportSize.X * 0.5 - halfWidth - 8) / safeScale
+        local maxY = math.max(0, viewportSize.Y * 0.5 - halfHeight - 8) / safeScale
         self._openPosition = UDim2.new(
             0.5,
             math.clamp(self._openPosition.X.Offset, -maxX, maxX),
@@ -1346,11 +1354,24 @@ local function controlRow(section, name, height)
     return outer, core
 end
 
+local function controlDescription(core, content, top)
+    if content == nil or tostring(content) == "" then return nil end
+    local description = label(core, tostring(content), 9, C.muted, FONT_LABEL)
+    description.Position = UDim2.fromOffset(16, top)
+    description.Size = UDim2.new(1, -32, 0, 16)
+    description.TextTruncate = Enum.TextTruncate.AtEnd
+    description.ZIndex = 3
+    return description
+end
+
 function Section:CreateToggle(config)
     config = config or {}
-    local outer, core = controlRow(self, config.Name or "Toggle", 46)
+    local hasDescription = config.Content ~= nil and tostring(config.Content) ~= ""
+    local outer, core = controlRow(self, config.Name or "Toggle", hasDescription and 54 or 46)
     local title = label(core, config.Name or "Toggle", 12, C.ivory, FONT_LABEL)
-    title.Position = UDim2.fromOffset(16, 0); title.Size = UDim2.new(1, -94, 1, 0); title.ZIndex = 3
+    title.Position = UDim2.fromOffset(16, hasDescription and 3 or 0)
+    title.Size = UDim2.new(1, -94, 0, hasDescription and 22 or 46); title.ZIndex = 3
+    if hasDescription then controlDescription(core, config.Content, 29) end
     local button = make("Frame", { Name = "HitArea", BackgroundTransparency = 1, Active = true, Size = UDim2.fromScale(1,1), ZIndex = 10 }, core)
     local track = make("Frame", {
         BackgroundColor3 = config.Default and C.primary or C.trackOff, BorderSizePixel = 0,
@@ -1381,19 +1402,28 @@ function Section:CreateToggle(config)
     end
     bindActivation(button, function() set(not state, true) end)
     bindHover(button, hoverLayer(core, C.hover, 19, 2, 0.94))
-    return { _frame = outer, Set = function(_, v) set(v, true) end, Get = function() return state end }
+    return {
+        _frame = outer,
+        Set = function(_, v) set(v, true) end,
+        Get = function() return state end,
+        SetValue = function(_, v) set(v, true) end,
+        GetValue = function() return state end,
+    }
 end
 
 function Section:CreateButton(config)
     config = config or {}
-    local outer, core = controlRow(self, config.Name or "Button", 40)
+    local hasDescription = config.Content ~= nil and tostring(config.Content) ~= ""
+    local outer, core = controlRow(self, config.Name or "Button", hasDescription and 52 or 40)
     local button = make("TextButton", {
         Name = "HitArea", BackgroundTransparency = 1, Active = true,
         Text = "", AutoButtonColor = false,
         Size = UDim2.fromScale(1, 1), ZIndex = 10,
     }, core)
     local text = label(core, config.Name or "Action", 12, C.ivory, FONT_LABEL)
-    text.Position = UDim2.fromOffset(14, 0); text.Size = UDim2.new(1, -58, 1, 0); text.ZIndex = 3
+    text.Position = UDim2.fromOffset(14, hasDescription and 2 or 0)
+    text.Size = UDim2.new(1, -58, 0, hasDescription and 20 or 40); text.ZIndex = 3
+    if hasDescription then controlDescription(core, config.Content, 26) end
     local island = make("Frame", {
         BackgroundColor3 = C.primarySoft, BorderSizePixel = 0,
         AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0),
@@ -1418,20 +1448,23 @@ function Section:CreateDropdown(config)
     config = config or {}
     local options = config.Options or {}
     local selected = config.Default or options[1] or "Select"
-    local outer, core = controlRow(self, config.Name or "Dropdown", 40)
+    local hasDescription = config.Content ~= nil and tostring(config.Content) ~= ""
+    local baseHeight = hasDescription and 58 or 40
+    local outer, core = controlRow(self, config.Name or "Dropdown", baseHeight)
     outer.ClipsDescendants = true
     local title = label(core, config.Name or "Select", 11, C.secondary, FONT_LABEL)
-    title.Position = UDim2.fromOffset(16, 0); title.Size = UDim2.new(0.52, -16, 0, 40); title.ZIndex = 3
+    title.Position = UDim2.fromOffset(16, 0); title.Size = UDim2.new(0.52, -16, 0, hasDescription and 26 or 40); title.ZIndex = 3
     local value = label(core, tostring(selected), 11, C.ivory, FONT_LABEL)
-    value.Position = UDim2.new(0.52, 0, 0, 0); value.Size = UDim2.new(0.48, -42, 0, 40); value.ZIndex = 3
+    value.Position = UDim2.new(0.52, 0, 0, 0); value.Size = UDim2.new(0.48, -42, 0, hasDescription and 26 or 40); value.ZIndex = 3
     value.TextXAlignment = Enum.TextXAlignment.Right
-    local chevron = lucideIcon(core, "chevron-down", UDim2.new(1, -31, 0, 12), UDim2.fromOffset(16, 16), 6, C.primary)
+    if hasDescription then controlDescription(core, config.Content, 36) end
+    local chevron = lucideIcon(core, "chevron-down", UDim2.new(1, -31, 0, hasDescription and 5 or 12), UDim2.fromOffset(16, 16), 6, C.primary)
     local hit = make("Frame", {
         Name = "HitArea", BackgroundTransparency = 1, Active = true,
-        Size = UDim2.new(1, 0, 0, 40), ZIndex = 10,
+        Size = UDim2.new(1, 0, 0, baseHeight), ZIndex = 10,
     }, core)
     local list = make("Frame", {
-        BackgroundTransparency = 1, Position = UDim2.fromOffset(8, 42),
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(8, baseHeight + 2),
         Size = UDim2.new(1, -16, 0, math.max(0, #options * 38 - 4)), ZIndex = 3,
     }, core)
     make("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, list)
@@ -1440,7 +1473,7 @@ function Section:CreateDropdown(config)
     local function setOpen(nextOpen)
         open = nextOpen
         if not open then resetHoverLayers(outer) end
-        animate(outer, "expand", Motion.expand, { Size = UDim2.new(1, 0, 0, open and (48 + #options * 38) or 40) })
+        animate(outer, "expand", Motion.expand, { Size = UDim2.new(1, 0, 0, open and (baseHeight + 8 + #options * 38) or baseHeight) })
         if chevron then animate(chevron, "expand", Motion.expand, { Rotation = open and 180 or 0 }) end
         task.defer(clampScrollPosition, parentScroll)
     end
@@ -1468,9 +1501,15 @@ function Section:CreateDropdown(config)
     end
     bindActivation(hit, function() setOpen(not open) end)
     local headerHover = hoverLayer(core, C.hover, 19, 2, 0.94)
-    headerHover.Size = UDim2.new(1, 0, 0, 40)
+    headerHover.Size = UDim2.new(1, 0, 0, baseHeight)
     bindHover(hit, headerHover)
-    return { _frame = outer, Get = function() return selected end, Set = function(_, v) selected = v; value.Text = tostring(v) end }
+    return {
+        _frame = outer,
+        Get = function() return selected end,
+        Set = function(_, v) selected = v; value.Text = tostring(v) end,
+        GetValue = function() return selected end,
+        SetValue = function(_, v) selected = v; value.Text = tostring(v) end,
+    }
 end
 
 function Section:CreateMultiDropdown(config)
@@ -1489,20 +1528,23 @@ function Section:CreateMultiDropdown(config)
         return values
     end
 
-    local outer, core = controlRow(self, config.Name or "Multi-select", 40)
+    local hasDescription = config.Content ~= nil and tostring(config.Content) ~= ""
+    local baseHeight = hasDescription and 58 or 40
+    local outer, core = controlRow(self, config.Name or "Multi-select", baseHeight)
     outer.ClipsDescendants = true
     local title = label(core, config.Name or "Select", 11, C.secondary, FONT_LABEL)
-    title.Position = UDim2.fromOffset(16, 0); title.Size = UDim2.new(0.45, -16, 0, 40); title.ZIndex = 3
+    title.Position = UDim2.fromOffset(16, 0); title.Size = UDim2.new(0.45, -16, 0, hasDescription and 26 or 40); title.ZIndex = 3
     local value = label(core, "None", 11, C.ivory, FONT_LABEL)
     value.TextWrapped = false
     value.TextTruncate = Enum.TextTruncate.AtEnd
     value.Position = UDim2.new(0.45, 0, 0, 0)
-    value.Size = UDim2.new(0.55, -48, 0, 40)
+    value.Size = UDim2.new(0.55, -48, 0, hasDescription and 26 or 40)
     value.TextXAlignment = Enum.TextXAlignment.Right
     value.ZIndex = 3
-    local chevron = lucideIcon(core, "chevron-down", UDim2.new(1, -26, 0, 12), UDim2.fromOffset(16, 16), 6, C.primary)
-    local hit = make("Frame", { Name = "HitArea", BackgroundTransparency = 1, Active = true, Size = UDim2.new(1, 0, 0, 40), ZIndex = 10 }, core)
-    local list = make("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(8, 42), Size = UDim2.new(1, -16, 0, math.max(0, #options * 38 - 4)), ZIndex = 3 }, core)
+    if hasDescription then controlDescription(core, config.Content, 36) end
+    local chevron = lucideIcon(core, "chevron-down", UDim2.new(1, -26, 0, hasDescription and 5 or 12), UDim2.fromOffset(16, 16), 6, C.primary)
+    local hit = make("Frame", { Name = "HitArea", BackgroundTransparency = 1, Active = true, Size = UDim2.new(1, 0, 0, baseHeight), ZIndex = 10 }, core)
+    local list = make("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(8, baseHeight + 2), Size = UDim2.new(1, -16, 0, math.max(0, #options * 38 - 4)), ZIndex = 3 }, core)
     make("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, list)
     local open = false
     local parentScroll = self._tab._scroll
@@ -1521,7 +1563,7 @@ function Section:CreateMultiDropdown(config)
     local function setOpen(nextOpen)
         open = nextOpen
         if not open then resetHoverLayers(outer) end
-        animate(outer, "expand", Motion.expand, { Size = UDim2.new(1, 0, 0, open and (48 + #options * 38) or 40) })
+        animate(outer, "expand", Motion.expand, { Size = UDim2.new(1, 0, 0, open and (baseHeight + 8 + #options * 38) or baseHeight) })
         if chevron then animate(chevron, "expand", Motion.expand, { Rotation = open and 180 or 0 }) end
         task.defer(clampScrollPosition, parentScroll)
     end
@@ -1557,12 +1599,23 @@ function Section:CreateMultiDropdown(config)
     refreshValue()
     bindActivation(hit, function() setOpen(not open) end)
     local headerHover = hoverLayer(core, C.hover, 19, 2, 0.94)
-    headerHover.Size = UDim2.new(1, 0, 0, 40)
+    headerHover.Size = UDim2.new(1, 0, 0, baseHeight)
     bindHover(hit, headerHover)
     return {
         _frame = outer,
         Get = function() return selectedValues() end,
+        GetValue = function() return selectedValues() end,
         Set = function(_, values)
+            selected = {}
+            selectionOrder = {}
+            for _, option in ipairs(values or {}) do
+                selected[option] = true
+                table.insert(selectionOrder, option)
+            end
+            refreshValue()
+            for _, refreshChoice in ipairs(choiceRefreshers) do refreshChoice() end
+        end,
+        SetValue = function(_, values)
             selected = {}
             selectionOrder = {}
             for _, option in ipairs(values or {}) do
@@ -1577,22 +1630,31 @@ end
 
 function Section:CreateTextbox(config)
     config = config or {}
-    local outer, core = controlRow(self, config.Name or "Textbox", 44)
+    local hasDescription = config.Content ~= nil and tostring(config.Content) ~= ""
+    local outer, core = controlRow(self, config.Name or "Textbox", hasDescription and 58 or 44)
     core.Active = true
     local title = label(core, config.Name or "Input", 11, C.secondary)
-    title.Position = UDim2.fromOffset(16, 0); title.Size = UDim2.new(0.45, -16, 1, 0); title.ZIndex = 3
+    title.Position = UDim2.fromOffset(16, 0); title.Size = UDim2.new(0.45, -16, 0, hasDescription and 36 or 44); title.ZIndex = 3
+    if hasDescription then controlDescription(core, config.Content, 40) end
     local input = make("TextBox", {
         BackgroundColor3 = C.shell, Text = config.Default or "", PlaceholderText = config.Placeholder or "Enter value",
         PlaceholderColor3 = C.muted, TextColor3 = C.ivory, TextSize = 15,
         FontFace = FONT_LABEL, ClearTextOnFocus = false,
-        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.new(0.52, 0, 0, 32), ZIndex = 3,
+        AnchorPoint = hasDescription and Vector2.new(1, 0) or Vector2.new(1, 0.5),
+        Position = hasDescription and UDim2.new(1, -10, 0, 3) or UDim2.new(1, -10, 0.5, 0),
+        Size = UDim2.new(0.52, 0, 0, hasDescription and 30 or 32), ZIndex = 3,
     }, core)
     padding(input, 12, 12, 0, 0); corner(input, 16); local inputStroke = stroke(input, C.line, 0.1)
     bindHover(core, hoverLayer(core, C.hover, 19, 2, 0.94))
     input.Focused:Connect(function() animate(inputStroke, "focus", Motion.fast, { Color = C.primary, Thickness = 1.35 }) end)
     input.FocusLost:Connect(function(enter) animate(inputStroke, "focus", Motion.base, { Color = C.line, Thickness = 1 }); if config.Callback then task.spawn(config.Callback, input.Text, enter) end end)
-    return { _frame = outer, Get = function() return input.Text end, Set = function(_, v) input.Text = tostring(v) end }
+    return {
+        _frame = outer,
+        Get = function() return input.Text end,
+        Set = function(_, v) input.Text = tostring(v) end,
+        GetValue = function() return input.Text end,
+        SetValue = function(_, v) input.Text = tostring(v) end,
+    }
 end
 
 function Tab:CreateStatRow(stats)
@@ -1744,17 +1806,21 @@ function Section:CreateSlider(config)
         local ownsRelease = slideUsesMouse and input.UserInputType == Enum.UserInputType.MouseButton1 or (not slideUsesMouse and input == slidePointer)
         if ownsRelease then sliding = false; slidePointer = nil end
     end))
-    return {
+    local control = {
         _frame = outer,
         Get = function() return current end,
         Set = function(_, v) setFromX(track.AbsolutePosition.X + track.AbsoluteSize.X * (range > 0 and math.clamp((tonumber(v) - min)/range,0,1) or 0), true) end,
     }
+    control.GetValue = control.Get
+    control.SetValue = control.Set
+    return control
 end
 
 function Section:AddToggle(config)
     config = config or {}
     return self:CreateToggle({
         Name = config.Title or config.Name or "Toggle",
+        Content = config.Content,
         Default = config.Default == true,
         Callback = config.Callback,
     })
@@ -1764,6 +1830,7 @@ function Section:AddButton(config)
     config = config or {}
     return self:CreateButton({
         Name = config.Title or config.Name or "Button",
+        Content = config.Content,
         Callback = config.Callback,
     })
 end
@@ -1775,14 +1842,22 @@ function Section:AddDropdown(config)
         if type(default) ~= "table" then default = default ~= nil and { default } or {} end
         return self:CreateMultiDropdown({
             Name = config.Title or config.Name or "Dropdown",
+            Content = config.Content,
             Options = config.Options or {},
             Default = default,
             Callback = config.Callback,
         })
     end
+
+    function Section:AddMultiDropdown(config)
+        config = config or {}
+        config.Multi = true
+        return self:AddDropdown(config)
+    end
     if type(default) == "table" then default = default[1] end
     return self:CreateDropdown({
         Name = config.Title or config.Name or "Dropdown",
+        Content = config.Content,
         Options = config.Options or {},
         Default = default,
         Callback = config.Callback,
@@ -1793,9 +1868,38 @@ function Section:AddInput(config)
     config = config or {}
     return self:CreateTextbox({
         Name = config.Title or config.Name or "Input",
+        Content = config.Content,
         Default = config.Default or "",
         Placeholder = config.Placeholder,
         Callback = config.Callback,
+    })
+end
+
+Section.AddTextbox = Section.AddInput
+Section.AddTextBox = Section.AddInput
+Section.AddSwitch = Section.AddToggle
+
+function Section:AddSlider(config)
+    config = config or {}
+    return self:CreateSlider({
+        Name = config.Title or config.Name or "Slider",
+        Min = config.Min,
+        Max = config.Max,
+        Step = config.Step or config.Increment,
+        Default = config.Default,
+        Callback = config.Callback,
+    })
+end
+
+function Section:AddLabel(text)
+    return self:CreateLabel(text)
+end
+
+function Section:AddHeader(config)
+    config = config or {}
+    return self._tab:CreateHeader({
+        Title = config.Title or config.Name or tostring(config),
+        Subtitle = config.Content or config.Subtitle or "",
     })
 end
 
@@ -1832,7 +1936,7 @@ function Section:AddParagraph(config)
     content.TextYAlignment = Enum.TextYAlignment.Top
     content.Visible = contentText ~= nil and tostring(contentText) ~= ""
 
-    return {
+    local paragraph = {
         _frame = frame,
         Set = function(_, value)
             if type(value) == "table" then
@@ -1850,7 +1954,11 @@ function Section:AddParagraph(config)
             end
         end,
     }
+    paragraph.SetValue = paragraph.Set
+    return paragraph
 end
+
+Section.CreateParagraph = Section.AddParagraph
 
 function Section:AddLine()
     local line = make("Frame", {
@@ -1874,6 +1982,85 @@ function Section:AddSeperator(value)
 end
 
 Section.AddSeparator = Section.AddSeperator
+
+local function tabControls(tab)
+    return setmetatable({ _tab = tab, _name = "Controls" }, Section)
+end
+
+function Tab:AddParagraph(config)
+    return tabControls(self):AddParagraph(config)
+end
+
+function Tab:AddLabel(text)
+    return tabControls(self):AddLabel(text)
+end
+
+function Tab:AddLine()
+    return tabControls(self):AddLine()
+end
+
+function Tab:AddSeperator(value)
+    return tabControls(self):AddSeperator(value)
+end
+
+Tab.AddSeparator = Tab.AddSeperator
+
+function Tab:AddHeader(config)
+    return self:CreateHeader(config)
+end
+
+function Tab:AddToggle(config)
+    return tabControls(self):AddToggle(config)
+end
+
+function Tab:AddButton(config)
+    return tabControls(self):AddButton(config)
+end
+
+function Tab:AddDropdown(config)
+    return tabControls(self):AddDropdown(config)
+end
+
+function Tab:AddInput(config)
+    return tabControls(self):AddInput(config)
+end
+
+function Tab:AddSlider(config)
+    return tabControls(self):AddSlider(config)
+end
+
+function Tab:AddMultiDropdown(config)
+    return tabControls(self):AddMultiDropdown(config)
+end
+
+Tab.AddTextbox = Tab.AddInput
+Tab.AddTextBox = Tab.AddInput
+Tab.AddSwitch = Tab.AddToggle
+
+function Window:GetTab(name)
+    for _, tab in ipairs(self._tabs) do
+        if tab._name == name then return tab end
+    end
+end
+
+function Window:SelectTab(name)
+    local tab = type(name) == "table" and name or self:GetTab(name)
+    if not tab then return false end
+    self:_select(tab)
+    return true
+end
+
+function Window:SetVisible(visible)
+    if visible then
+        self:Open()
+    else
+        self:Minimize()
+    end
+end
+
+function Window:Notify(config)
+    return NexusLib:Notify(config)
+end
 
 function NexusLib:DestroyAll()
     for _, window in ipairs(self._windows) do pcall(function() window:Destroy() end) end
