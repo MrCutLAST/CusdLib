@@ -750,6 +750,15 @@ function NexusLib:Notify(config)
     task.delay(config.Duration or 4, dismiss)
 end
 
+function NexusLib:SetNotification(notification)
+    notification = notification or {}
+    return self:Notify({
+        Title = tostring(notification[1] or "Khfresh Hub"),
+        Message = tostring(notification[3] or notification[2] or ""),
+        Duration = tonumber(notification[4]) or 5,
+    })
+end
+
 function NexusLib:GetTheme()
     return currentTheme
 end
@@ -847,9 +856,14 @@ function NexusLib:CreateWindow(config)
     local subtitle = label(rail, config.Subtitle or ("@" .. player.Name), 9, C.muted, FONT_LABEL)
     subtitle.Position = UDim2.fromOffset(60, 38); subtitle.Size = UDim2.new(1, -72, 0, 14); subtitle.TextTruncate = Enum.TextTruncate.AtEnd; subtitle.ZIndex = 5
 
-    local nav = make("Frame", {
-        Name = "Navigation", BackgroundTransparency = 1, Position = UDim2.fromOffset(14, 88),
-        Size = UDim2.new(1, -28, 1, -136), ClipsDescendants = true, ZIndex = 4,
+    local nav = make("ScrollingFrame", {
+        Name = "Navigation", BackgroundTransparency = 1, BorderSizePixel = 0,
+        Position = UDim2.fromOffset(14, 88), Size = UDim2.new(1, -28, 1, -136),
+        ClipsDescendants = true, Active = true, ScrollingEnabled = true,
+        ScrollingDirection = Enum.ScrollingDirection.Y, ElasticBehavior = Enum.ElasticBehavior.WhenScrollable,
+        CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 2, ScrollBarImageColor3 = C.primary, ScrollBarImageTransparency = 1,
+        VerticalScrollBarInset = Enum.ScrollBarInset.None, ZIndex = 4,
     }, rail)
     make("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder }, nav)
 
@@ -916,6 +930,11 @@ function NexusLib:CreateWindow(config)
     }, shell)
     corner(bottomBar, 20)
     make("Frame", { BorderSizePixel = 0, BackgroundColor3 = C.lineSoft, Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 1), ZIndex = 8 }, bottomBar)
+    local grip = lucideIcon(bottomBar, "grip-horizontal", UDim2.fromScale(0.5, 0), UDim2.fromOffset(34, 18), 9, C.muted)
+    if grip then
+        grip.AnchorPoint = Vector2.new(0.5, 0)
+        grip.Position = UDim2.new(0.5, 0, 0, 2)
+    end
     local resizeHandle = make("ImageButton", {
         Name = "ResizeHandle", BackgroundTransparency = 1, BorderSizePixel = 0, AutoButtonColor = false,
         Active = true, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 0, 1, 0),
@@ -1095,9 +1114,10 @@ end
 
 function Window:CreateTab(name, iconName)
     local index = #self._tabs + 1
-    local button = make("Frame", {
+    local button = make("TextButton", {
         Name = name .. "Tab", LayoutOrder = index, BackgroundColor3 = Color3.fromRGB(30, 31, 31),
-        BackgroundTransparency = 1, Active = true,
+        BackgroundTransparency = 1, BorderSizePixel = 0, Active = true,
+        Text = "", AutoButtonColor = false, Selectable = true,
         Size = UDim2.fromOffset(156, 36), ZIndex = 3,
     }, self._nav)
     corner(button, 18)
@@ -1135,7 +1155,9 @@ function Window:CreateTab(name, iconName)
         _label = text, _iconParts = iconParts, _iconScale = iconScale, _page = page, _scroll = scroll, _order = 0,
     }, Tab)
     table.insert(self._tabs, tab)
-    bindActivation(button, function() self:_select(tab) end)
+    table.insert(self._connections, button.Activated:Connect(function()
+        self:_select(tab)
+    end))
     button.MouseEnter:Connect(function()
         self._hoveredTab = tab
         self:_renderNavState()
