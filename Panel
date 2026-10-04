@@ -541,6 +541,9 @@ local function bindActivation(hitTarget, callback)
     hitTarget.Active = true
     hitTarget.Selectable = true
     local surface = hitTarget.Parent or hitTarget
+    if hitTarget.Name:match("Tab$") then
+        surface = hitTarget
+    end
     local pressLayer = makePressLayer(surface, 12, math.max(surface.ZIndex + 1, hitTarget.ZIndex - 1))
     hitTarget.InputBegan:Connect(function(input)
         if pressedInput ~= nil then return end
