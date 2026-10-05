@@ -1,3 +1,4 @@
+
 -- Custom UI library / Material You inspired visual system
 -- Public creation API remains compatible with the previous library.
 -- Icons: Lucide assets with legacy algorithm rendering retained for close/minimize.
@@ -15,7 +16,6 @@ local NexusLib = { _windows = {}, _notificationGui = nil }
 
 -- Two locked visual profiles. system24 values are sRGB conversions of the
 -- upstream OKLCH defaults (neutral 19/23/27/31% surfaces and purple h310).
-local THEME_FILE = "CustomUILib/settings.json"
 local LUCIDE_URL = "https://raw.githubusercontent.com/Footagesus/Icons/46d30c19ba7bc601d6ec794a48dc3a89568b1eec/lucide/dist/Icons.lua"
 local DEFAULT_FLOATING_ICON = "rbxassetid://77021539815611" -- Lucide: menu
 local PANEL_ATTRIBUTE = "CustomUILibPanel"
@@ -126,6 +126,21 @@ local THEMES = {
 }
 
 local runtimeEnv = (getgenv and getgenv()) or _G or {}
+local function spawnTask(callback, ...)
+    local session = runtimeEnv.__KhfreshHubSession
+    if session and type(session.Spawn) == "function" then
+        return session:Spawn(callback, ...)
+    end
+    return task.spawn(callback, ...)
+end
+
+local function delayTask(seconds, callback, ...)
+    local session = runtimeEnv.__KhfreshHubSession
+    if session and type(session.Delay) == "function" then
+        return session:Delay(seconds, callback, ...)
+    end
+    return task.delay(seconds, callback, ...)
+end
 
 local currentTheme
 
@@ -145,15 +160,8 @@ local function normalizeTheme(value)
 end
 
 local function readSavedTheme()
-    local selected = runtimeEnv.NexusTheme or runtimeEnv.CustomUITheme
-    if isfile and readfile and isfile(THEME_FILE) then
-        local okRead, raw = pcall(readfile, THEME_FILE)
-        if okRead and type(raw) == "string" then
-            local okJson, data = pcall(HttpService.JSONDecode, HttpService, raw)
-            if okJson and type(data) == "table" and data.theme then selected = data.theme end
-        end
-    end
-    return normalizeTheme(selected)
+    -- Default UI theme: Ocean Glass for a brighter, blue-accented palette
+    return normalizeTheme("ocean")
 end
 
 currentTheme = readSavedTheme()
@@ -404,6 +412,8 @@ end
 local function tween(object, info, properties)
     if not object then return end
     local animation = TweenService:Create(object, info, properties)
+    local session = runtimeEnv.__KhfreshHubSession
+    if session and type(session.TrackTween) == "function" then session:TrackTween(animation) end
     animation:Play()
     return animation
 end
@@ -417,6 +427,8 @@ local function animate(object, channel, info, properties)
     end
     if channels[channel] then channels[channel]:Cancel() end
     local animation = TweenService:Create(object, info, properties)
+    local session = runtimeEnv.__KhfreshHubSession
+    if session and type(session.TrackTween) == "function" then session:TrackTween(animation) end
     channels[channel] = animation
     animation.Completed:Connect(function()
         if channels[channel] == animation then channels[channel] = nil end
@@ -567,7 +579,7 @@ local function bindActivation(hitTarget, callback)
         local pointer = pressedWithPointer
         pressedInput = nil; pressedAt = nil; pressedWithPointer = false
         animate(pressLayer, "press", Motion.release, { BackgroundTransparency = 1 })
-        task.delay(0.17, function() if pressLayer.Parent and pressLayer.BackgroundTransparency >= 0.995 then pressLayer.Visible = false end end)
+        delayTask(0.17, function() if pressLayer.Parent and pressLayer.BackgroundTransparency >= 0.995 then pressLayer.Visible = false end end)
         local scale = hitTarget:FindFirstChildOfClass("UIScale") or (hitTarget.Parent and hitTarget.Parent:FindFirstChildOfClass("UIScale"))
         if scale then animate(scale, "press", Motion.release, { Scale = 1 }) end
         if not pointer then callback(); return end
@@ -644,14 +656,7 @@ local function applyThemeToObject(object, oldColors, profile)
 end
 
 local function saveTheme(themeId)
-    runtimeEnv.NexusTheme = themeId
-    runtimeEnv.CustomUITheme = themeId
-    if not writefile then return false end
-    pcall(function()
-        if makefolder and not (isfolder and isfolder("CustomUILib")) then makefolder("CustomUILib") end
-    end)
-    local payload = HttpService:JSONEncode({ version = 2, theme = themeId })
-    return pcall(writefile, THEME_FILE, payload)
+    return true
 end
 
 function NexusLib:GetIcon(name)
@@ -742,12 +747,12 @@ function NexusLib:Notify(config)
         closing = true
         tween(card, Motion.exit, { GroupTransparency = 1, Position = UDim2.new(0, 18, 0, 0) })
         tween(cardScale, Motion.popOut, { Scale = 0.96 })
-        task.delay(0.22, function() if holder.Parent then holder:Destroy() end end)
+        delayTask(0.22, function() if holder.Parent then holder:Destroy() end end)
     end
     bindActivation(close, dismiss)
     tween(card, Motion.enter, { GroupTransparency = 0, Position = UDim2.new(0, 0, 0, 0) })
     tween(cardScale, Motion.popIn, { Scale = 1 })
-    task.delay(config.Duration or 4, dismiss)
+    delayTask(config.Duration or 4, dismiss)
 end
 
 function NexusLib:SetNotification(notification)
@@ -1222,7 +1227,7 @@ function Window:Minimize()
     local visibilityId = self._visibilityId
     tween(self._shell, Motion.exit, { Position = self._openPosition + UDim2.fromOffset(0, 12), GroupTransparency = 1 })
     tween(self._shadow, Motion.exit, { BackgroundTransparency = 1 })
-    task.delay(0.21, function()
+    delayTask(0.21, function()
         if self._visibilityId ~= visibilityId or self._open then return end
         if self._shell then self._shell.Visible = false end
         local launcher = self._launcher
@@ -1398,7 +1403,7 @@ function Section:CreateToggle(config)
             BackgroundColor3 = state and C.onPrimary or C.secondary,
         })
         knobGradient.Color = gradientSequence("primary", THEMES[currentTheme])
-        if emit and config.Callback then task.spawn(config.Callback, state) end
+        if emit and config.Callback then spawnTask(config.Callback, state) end
     end
     bindActivation(button, function() set(not state, true) end)
     bindHover(button, hoverLayer(core, C.hover, 19, 2, 0.94))
@@ -1440,7 +1445,7 @@ function Section:CreateButton(config)
         animate(island, "button", Motion.hoverOut, { BackgroundColor3 = C.primarySoft })
         if chevron then animate(chevron, "button", Motion.hoverOut, { ImageColor3 = C.primary }) end
     end)
-    bindActivation(button, function() if config.Callback then task.spawn(config.Callback) end end)
+    bindActivation(button, function() if config.Callback then spawnTask(config.Callback) end end)
     return { _frame = outer }
 end
 
@@ -1496,7 +1501,7 @@ function Section:CreateDropdown(config)
             function() choiceLabel.TextColor3 = C.secondary end)
         bindActivation(choiceHit, function()
             selected = option; value.Text = tostring(option); setOpen(false)
-            if config.Callback then task.spawn(config.Callback, option) end
+            if config.Callback then spawnTask(config.Callback, option) end
         end)
     end
     bindActivation(hit, function() setOpen(not open) end)
@@ -1592,7 +1597,7 @@ function Section:CreateMultiDropdown(config)
                 table.insert(selectionOrder, option)
             end
             refreshChoice(); refreshValue()
-            if config.Callback then task.spawn(config.Callback, selectedValues()) end
+            if config.Callback then spawnTask(config.Callback, selectedValues()) end
         end)
         refreshChoice()
     end
@@ -1647,7 +1652,7 @@ function Section:CreateTextbox(config)
     padding(input, 12, 12, 0, 0); corner(input, 16); local inputStroke = stroke(input, C.line, 0.1)
     bindHover(core, hoverLayer(core, C.hover, 19, 2, 0.94))
     input.Focused:Connect(function() animate(inputStroke, "focus", Motion.fast, { Color = C.primary, Thickness = 1.35 }) end)
-    input.FocusLost:Connect(function(enter) animate(inputStroke, "focus", Motion.base, { Color = C.line, Thickness = 1 }); if config.Callback then task.spawn(config.Callback, input.Text, enter) end end)
+    input.FocusLost:Connect(function(enter) animate(inputStroke, "focus", Motion.base, { Color = C.line, Thickness = 1 }); if config.Callback then spawnTask(config.Callback, input.Text, enter) end end)
     return {
         _frame = outer,
         Get = function() return input.Text end,
@@ -1725,7 +1730,7 @@ function Tab:CreateFeaturedCard(config)
     }, action)
     addPressScale(action)
     bindHover(actionHit, actionHover)
-    bindActivation(actionHit, function() if config.Callback then task.spawn(config.Callback) end end)
+    bindActivation(actionHit, function() if config.Callback then spawnTask(config.Callback) end end)
     return { _frame = outer }
 end
 
@@ -1783,7 +1788,7 @@ function Section:CreateSlider(config)
         value.Text = tostring(current)
         fill.Size = UDim2.new(snappedAlpha,0,1,0)
         thumb.Position = UDim2.new(snappedAlpha,0,0.5,0)
-        if emit and config.Callback then task.spawn(config.Callback, current) end
+        if emit and config.Callback then spawnTask(config.Callback, current) end
     end
     local sliding, slidePointer, slideUsesMouse = false, nil, false
     bindHover(hit, hoverLayer(core, C.hover, 19, 2, 0.94))
@@ -2072,4 +2077,12 @@ end
 
 local env = (getgenv and getgenv()) or _G or (getfenv and getfenv(0)) or {}
 env.NexusLib = NexusLib
+local hubSession = runtimeEnv.__KhfreshHubSession
+if hubSession and type(hubSession.AddCleanup) == "function" then
+    hubSession:AddCleanup(function()
+        NexusLib.Unloaded = true
+        NexusLib:DestroyAll()
+    end)
+end
 return NexusLib
+
